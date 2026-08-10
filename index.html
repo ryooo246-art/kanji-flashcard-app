@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>かんじカード♪ よんでみよう</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mochiy+Pop+One&family=Zen+Maru+Gothic:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="bg-decor" aria-hidden="true">
+  <span class="cloud c1">☁️</span>
+  <span class="cloud c2">☁️</span>
+  <span class="leaf l1">🍃</span>
+  <span class="leaf l2">🍃</span>
+</div>
+
+<!-- ============ 画面1: 学年えらび ============ -->
+<section id="screen-setup" class="screen">
+  <header class="app-header">
+    <div class="mascot" id="mascot-home">🌱</div>
+    <h1 class="app-title">かんじカード</h1>
+    <p class="app-sub">よんで、おぼえて、レベルアップ！</p>
+  </header>
+
+  <div class="setup-card api-card">
+    <h2 class="setup-heading">Gemini APIキー設定</h2>
+    <div class="api-row">
+      <input type="password" id="apiKeyInput" class="api-input" placeholder="AIza... で はじまる キーを はりつけ">
+      <button id="saveKeyBtn" class="btn-secondary">保存</button>
+    </div>
+    <div class="api-row api-row-model">
+      <label class="api-model-label" for="modelSelect">モデル:</label>
+      <select id="modelSelect" class="cute-select api-model-select">
+        <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite</option>
+        <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+        <option value="gemini-3-flash">gemini-3-flash</option>
+        <option value="gemini-2.5-flash">gemini-2.5-flash (旧)</option>
+      </select>
+    </div>
+    <div class="api-row">
+      <button id="listModelsBtn" class="btn-secondary">使えるモデルを取得</button>
+    </div>
+    <div id="keyStatus" class="api-status"></div>
+    <p class="api-hint">
+      キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> で無料発行できます(カード登録不要)。
+      入力したキーはこの端末のブラウザにのみ保存され、外部には送信されません。
+    </p>
+  </div>
+
+  <div class="setup-card">
+    <h2 class="setup-heading">がくねんを えらんでね</h2>
+    <div class="grade-list" id="grade-list">
+      <!-- JSで生成 -->
+    </div>
+
+    <div class="setup-options">
+      <label class="option-row">
+        <span>もんだいの すすめかた</span>
+        <select id="order-mode" class="cute-select">
+          <option value="random">じゅんばん バラバラ</option>
+          <option value="inorder">じゅんばん どおり</option>
+        </select>
+      </label>
+    </div>
+
+    <button id="btn-start" class="btn-primary" disabled>スタート！</button>
+    <p class="setup-hint" id="setup-hint">がくねんに チェックをいれてね</p>
+  </div>
+</section>
+
+<!-- ============ 画面2: フラッシュカード本体 ============ -->
+<section id="screen-game" class="screen hidden">
+  <header class="game-topbar">
+    <button id="btn-back" class="btn-icon" title="もどる">🏠</button>
+    <div class="progress-wrap">
+      <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+      <span class="progress-label" id="progress-label">0 / 0</span>
+    </div>
+    <div class="stars-count"><span id="star-count">0</span> ⭐</div>
+  </header>
+
+  <div class="stage">
+    <div class="mascot-plant" id="mascot-plant">🌱</div>
+
+    <div class="card" id="flash-card">
+      <div class="kanji-badge" id="kanji-badge">一</div>
+      <div class="word-display" id="word-display">一つ</div>
+      <div class="reading-hint hidden" id="reading-hint"></div>
+    </div>
+
+    <div class="feedback-bubble hidden" id="feedback-bubble"></div>
+
+    <div class="mic-area">
+      <button id="btn-mic" class="btn-mic">
+        <span class="mic-icon">🎤</span>
+        <span class="mic-label" id="mic-label">タップして よんでね</span>
+      </button>
+      <div class="mic-visualizer hidden" id="mic-visualizer">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+    </div>
+
+    <div class="helper-row">
+      <button id="btn-hint" class="btn-secondary">💡 ヒント</button>
+      <button id="btn-skip" class="btn-secondary">➡️ つぎへ</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 画面3: セッション終了 ============ -->
+<section id="screen-done" class="screen hidden">
+  <div class="done-card">
+    <div class="done-mascot">🌳</div>
+    <h2>よくがんばったね！</h2>
+    <p id="done-summary">10もん中 8もん せいかい！</p>
+    <button id="btn-again" class="btn-primary">もういちど あそぶ</button>
+    <button id="btn-home" class="btn-secondary">がくねんを えらびなおす</button>
+  </div>
+</section>
+
+<!-- ごほうび演出レイヤー -->
+<div id="celebration-layer" aria-hidden="true"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
