@@ -4,7 +4,7 @@
 
 const state = {
   allWords: [],          // CSV全件 [{grade,kanji,word,reading}]
-  wordsByGrade: {},       // grade -> [words]
+  wordsByGrade: {},       // カテゴリid -> [words]
   queue: [],              // 今回の出題キュー
   qIndex: 0,
   correctCount: 0,
@@ -16,7 +16,18 @@ const state = {
   orderMode: 'random',
 };
 
-const GRADE_LABELS = {1:'1年生', 2:'2年生', 3:'3年生', 4:'4年生', 5:'5年生', 6:'6年生'};
+// 出題カテゴリ一覧。fileが無いものは自動的に「じゅんびちゅう」表示になる。
+const CATEGORIES = [
+  { id: 'hiragana', label: 'ひらがな', file: 'data/hiragana.csv' },
+  { id: 'katakana', label: 'カタカナ', file: 'data/katakana.csv' },
+  { id: 1, label: '1年生', file: 'data/grade1.csv' },
+  { id: 2, label: '2年生', file: 'data/grade2.csv' },
+  { id: 3, label: '3年生', file: 'data/grade3.csv' },
+  { id: 4, label: '4年生', file: 'data/grade4.csv' },
+  { id: 5, label: '5年生', file: 'data/grade5.csv' },
+  { id: 6, label: '6年生', file: 'data/grade6.csv' },
+];
+const CATEGORY_LABELS = Object.fromEntries(CATEGORIES.map(c => [c.id, c.label]));
 
 const PRAISE_WORDS = [
   'すごい！', 'やったね！', 'かんぺき！', 'その ちょうし！', 'てんさい！',
@@ -29,31 +40,24 @@ const GENTLE_WORDS = [
 ];
 
 /* ---------------- CSV読み込み ---------------- */
-// 学年ごとのCSVファイル。ファイルが無い学年は自動的に「じゅんびちゅう」表示になる。
-const GRADE_FILES = {
-  1: 'data/grade1.csv',
-  2: 'data/grade2.csv',
-  // 3: 'data/grade3.csv', // 準備でき次第ここに追加
-  // 4: 'data/grade4.csv',
-  // 5: 'data/grade5.csv',
-  // 6: 'data/grade6.csv',
-};
-
 async function loadData(){
   state.allWords = [];
-  for(const [grade, path] of Object.entries(GRADE_FILES)){
+  for(const cat of CATEGORIES){
+    if(!cat.file) continue;
     try{
-      const res = await fetch(path);
+      const res = await fetch(cat.file);
       if(!res.ok) continue;
       const text = await res.text();
       const lines = text.trim().split('\n').slice(1); // ヘッダー除外
       for(const line of lines){
         if(!line.trim()) continue;
         const [g, kanji, word, reading] = line.split(',');
-        state.allWords.push({ grade: Number(g), kanji, word, reading });
+        // 数字にできるものは学年(数値)、できないものはカテゴリ名(ひらがな等)のまま保持
+        const gradeId = /^\d+$/.test(g) ? Number(g) : g;
+        state.allWords.push({ grade: gradeId, kanji, word, reading });
       }
     }catch(e){
-      console.warn(`${path} の読み込みに失敗しました`, e);
+      console.warn(`${cat.file} の読み込みに失敗しました`, e);
     }
   }
   state.wordsByGrade = {};
@@ -76,16 +80,17 @@ function shuffle(arr){
 function renderGradeList(){
   const list = document.getElementById('grade-list');
   list.innerHTML = '';
-  for(let g=1; g<=6; g++){
-    const has = !!state.wordsByGrade[g] && state.wordsByGrade[g].length>0;
+  for(const cat of CATEGORIES){
+    const has = !!state.wordsByGrade[cat.id] && state.wordsByGrade[cat.id].length>0;
     const item = document.createElement('div');
     item.className = 'grade-item' + (has ? '' : ' disabled');
-    const kanjiCount = has ? new Set(state.wordsByGrade[g].map(w=>w.kanji)).size : 0;
+    const kanjiCount = has ? new Set(state.wordsByGrade[cat.id].map(w=>w.kanji)).size : 0;
+    const unit = (cat.id === 'hiragana' || cat.id === 'katakana') ? '文字' : '字';
     item.innerHTML = `
-      <input type="checkbox" id="grade-${g}" ${has? '' : 'disabled'} ${g===1 && has ? 'checked' : ''}>
-      <label for="grade-${g}">
-        <span>${GRADE_LABELS[g]}</span>
-        ${has ? `<span class="badge-count">かんじ${kanjiCount}字</span>` : `<span class="badge-soon">じゅんびちゅう</span>`}
+      <input type="checkbox" id="grade-${cat.id}" ${has? '' : 'disabled'} ${cat.id===1 && has ? 'checked' : ''}>
+      <label for="grade-${cat.id}">
+        <span>${cat.label}</span>
+        ${has ? `<span class="badge-count">${kanjiCount}${unit}</span>` : `<span class="badge-soon">じゅんびちゅう</span>`}
       </label>`;
     list.appendChild(item);
     if(has){
@@ -102,9 +107,9 @@ function renderGradeList(){
 
 function getSelectedGrades(){
   const grades = [];
-  for(let g=1; g<=6; g++){
-    const cb = document.getElementById(`grade-${g}`);
-    if(cb && !cb.disabled && cb.checked) grades.push(g);
+  for(const cat of CATEGORIES){
+    const cb = document.getElementById(`grade-${cat.id}`);
+    if(cb && !cb.disabled && cb.checked) grades.push(cat.id);
   }
   return grades;
 }
@@ -114,7 +119,7 @@ function updateStartButton(){
   const btn = document.getElementById('btn-start');
   const hint = document.getElementById('setup-hint');
   btn.disabled = grades.length === 0;
-  hint.textContent = grades.length === 0 ? 'がくねんに チェックをいれてね' : `${grades.map(g=>GRADE_LABELS[g]).join('・')} で スタートできるよ`;
+  hint.textContent = grades.length === 0 ? 'がくねんに チェックをいれてね' : `${grades.map(g=>CATEGORY_LABELS[g]).join('・')} で スタートできるよ`;
 }
 
 /* ---------------- 出題キュー作成 ---------------- */
@@ -163,7 +168,10 @@ function renderQuestion(){
     return;
   }
   const q = state.queue[state.qIndex];
-  document.getElementById('kanji-badge').textContent = q.kanji;
+  const badge = document.getElementById('kanji-badge');
+  badge.textContent = q.kanji;
+  // ひらがな/カタカナ練習は単語表示とバッジが同じ文字になるので、バッジは隠す
+  badge.classList.toggle('hidden', q.kanji === q.word);
   document.getElementById('word-display').textContent = q.word;
   const hint = document.getElementById('reading-hint');
   hint.textContent = q.reading;
@@ -191,9 +199,42 @@ function updateMascotGrowth(){
   document.getElementById('mascot-plant').textContent = stages[idx];
 }
 
+const CHECKPOINT_INTERVAL = 10;
+
+// 1問終わるごとに呼ぶ。10問ごとに「つづける？」を挟み、最後まで来たら終了画面へ。
+function proceedAfterAnswer(){
+  if(state.qIndex >= state.queue.length){
+    finishSession();
+    return;
+  }
+  if(state.qIndex > 0 && state.qIndex % CHECKPOINT_INTERVAL === 0){
+    showCheckpoint();
+  }else{
+    renderQuestion();
+  }
+}
+
+function accuracyPraise(percent){
+  if(percent >= 90) return 'パーフェクトに ちかいよ！すごすぎる！';
+  if(percent >= 70) return 'とっても よく できました！';
+  if(percent >= 50) return 'だいぶ よめるように なってきたね！';
+  return 'よく がんばったね！つづけたら もっと よめるようになるよ！';
+}
+
+function showCheckpoint(){
+  const attempted = state.qIndex;
+  const percent = attempted > 0 ? Math.round(state.correctCount/attempted*100) : 0;
+  document.getElementById('checkpoint-summary').textContent =
+    `ここまで ${attempted}もん中 ${state.correctCount}もん せいかい！（せいかいりつ ${percent}%） ⭐${state.stars}こ`;
+  showScreen('screen-checkpoint');
+}
+
 function finishSession(){
+  const attempted = state.qIndex;
+  const percent = attempted > 0 ? Math.round(state.correctCount/attempted*100) : 0;
+  const praise = accuracyPraise(percent);
   document.getElementById('done-summary').textContent =
-    `${state.queue.length}もん中 ${state.correctCount}もん せいかい！ ⭐${state.stars}こ ゲット！`;
+    `${attempted}もん中 ${state.correctCount}もん せいかい！（せいかいりつ ${percent}%） ⭐${state.stars}こ ゲット！\n${praise}`;
   showScreen('screen-done');
 }
 
@@ -610,13 +651,18 @@ function onCorrect(){
   state.correctCount++;
   state.stars++;
   document.getElementById('star-count').textContent = state.stars;
+  const q = state.queue[state.qIndex];
   const praise = PRAISE_WORDS[Math.floor(Math.random()*PRAISE_WORDS.length)];
   showFeedback('ok', praise);
   showPraiseToast(praise);
   playChime();
   fireCelebration();
+  // 正解の読みを2秒間表示してから次の問題へ
+  const hint = document.getElementById('reading-hint');
+  hint.textContent = q.reading;
+  hint.classList.remove('hidden');
   state.qIndex++;
-  setTimeout(renderQuestion, 1100);
+  setTimeout(proceedAfterAnswer, 2000);
 }
 
 function onIncorrect(heard){
@@ -763,8 +809,10 @@ function bindEvents(){
   });
   document.getElementById('btn-skip').addEventListener('click', ()=>{
     state.qIndex++;
-    renderQuestion();
+    proceedAfterAnswer();
   });
+  document.getElementById('btn-checkpoint-continue').addEventListener('click', renderQuestion);
+  document.getElementById('btn-checkpoint-stop').addEventListener('click', finishSession);
 }
 
 (async function init(){
