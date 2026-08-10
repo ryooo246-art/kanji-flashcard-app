@@ -29,14 +29,33 @@ const GENTLE_WORDS = [
 ];
 
 /* ---------------- CSV読み込み ---------------- */
+// 学年ごとのCSVファイル。ファイルが無い学年は自動的に「じゅんびちゅう」表示になる。
+const GRADE_FILES = {
+  1: 'data/grade1.csv',
+  2: 'data/grade2.csv',
+  // 3: 'data/grade3.csv', // 準備でき次第ここに追加
+  // 4: 'data/grade4.csv',
+  // 5: 'data/grade5.csv',
+  // 6: 'data/grade6.csv',
+};
+
 async function loadData(){
-  const res = await fetch('data/grade1.csv');
-  const text = await res.text();
-  const lines = text.trim().split('\n').slice(1); // ヘッダー除外
-  state.allWords = lines.map(line => {
-    const [grade, kanji, word, reading] = line.split(',');
-    return { grade: Number(grade), kanji, word, reading };
-  });
+  state.allWords = [];
+  for(const [grade, path] of Object.entries(GRADE_FILES)){
+    try{
+      const res = await fetch(path);
+      if(!res.ok) continue;
+      const text = await res.text();
+      const lines = text.trim().split('\n').slice(1); // ヘッダー除外
+      for(const line of lines){
+        if(!line.trim()) continue;
+        const [g, kanji, word, reading] = line.split(',');
+        state.allWords.push({ grade: Number(g), kanji, word, reading });
+      }
+    }catch(e){
+      console.warn(`${path} の読み込みに失敗しました`, e);
+    }
+  }
   state.wordsByGrade = {};
   for(const w of state.allWords){
     if(!state.wordsByGrade[w.grade]) state.wordsByGrade[w.grade] = [];
@@ -178,7 +197,12 @@ function finishSession(){
   showScreen('screen-done');
 }
 
-/* ---------------- マイク録音 ---------------- */
+/* ---------------- マイク録音(音量を見て自動でストップ) ---------------- */
+const SPEECH_THRESHOLD = 0.02;   // これを超えたら「話している」とみなす音量
+const SILENCE_HOLD_MS = 700;     // 話した後、これだけ静かが続いたら自動ストップ
+const MIN_RECORD_MS = 350;       // 誤タップ対策：最低でもこれだけは録音する
+const MAX_RECORD_MS = 6000;      // 安全のための最大録音時間
+
 async function toggleRecording(){
   if(state.isRecording){
     stopRecording();
@@ -194,16 +218,67 @@ async function toggleRecording(){
     });
     state.mediaRecorder.addEventListener('stop', () => {
       stream.getTracks().forEach(t=>t.stop());
+      stopVolumeWatch();
       handleRecordedAudio();
     });
     state.mediaRecorder.start();
     state.isRecording = true;
+    state._recordStartedAt = Date.now();
     setMicUI(true);
-    // 安全のため最大6秒で自動停止
-    state._autoStopTimer = setTimeout(()=>{ if(state.isRecording) stopRecording(); }, 6000);
+
+    startVolumeWatch(stream);
+    // 安全のため最大何秒かで自動停止
+    state._autoStopTimer = setTimeout(()=>{ if(state.isRecording) stopRecording(); }, MAX_RECORD_MS);
   }catch(err){
     console.error(err);
     showFeedback('ng', 'マイクが つかえなかったよ。せっていを かくにんしてね');
+  }
+}
+
+function startVolumeWatch(stream){
+  state._voiceCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const source = state._voiceCtx.createMediaStreamSource(stream);
+  const analyser = state._voiceCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  source.connect(analyser);
+  const data = new Uint8Array(analyser.fftSize);
+
+  let hasSpoken = false;
+  let silenceStartedAt = null;
+
+  function tick(){
+    if(!state.isRecording) return;
+    analyser.getByteTimeDomainData(data);
+    // 音量(RMS)を計算
+    let sumSq = 0;
+    for(let i=0;i<data.length;i++){
+      const v = (data[i]-128)/128;
+      sumSq += v*v;
+    }
+    const rms = Math.sqrt(sumSq/data.length);
+
+    const elapsed = Date.now() - state._recordStartedAt;
+    if(rms > SPEECH_THRESHOLD){
+      hasSpoken = true;
+      silenceStartedAt = null;
+    }else if(hasSpoken && elapsed > MIN_RECORD_MS){
+      if(silenceStartedAt === null) silenceStartedAt = Date.now();
+      else if(Date.now() - silenceStartedAt > SILENCE_HOLD_MS){
+        stopRecording();
+        return;
+      }
+    }
+    state._volumeRAF = requestAnimationFrame(tick);
+  }
+  state._volumeRAF = requestAnimationFrame(tick);
+}
+
+function stopVolumeWatch(){
+  if(state._volumeRAF) cancelAnimationFrame(state._volumeRAF);
+  state._volumeRAF = null;
+  if(state._voiceCtx){
+    state._voiceCtx.close().catch(()=>{});
+    state._voiceCtx = null;
   }
 }
 
@@ -221,7 +296,7 @@ function setMicUI(recording){
   const label = document.getElementById('mic-label');
   const vis = document.getElementById('mic-visualizer');
   btn.classList.toggle('recording', recording);
-  label.textContent = recording ? 'タップで ストップ' : 'タップして よんでね';
+  label.textContent = recording ? 'きいているよ...' : 'タップして よんでね';
   vis.classList.toggle('hidden', !recording);
 }
 
