@@ -136,6 +136,8 @@ h1,h2{font-family:'Mochiy Pop One', sans-serif; font-weight:400; margin:0;}
 
 #btn-start{width:100%; margin-top:16px;}
 .setup-hint{text-align:center; color:var(--text-soft); font-size:.85rem; margin-top:10px; font-weight:700;}
+.reset-link{text-align:center; font-size:.75rem; color:var(--text-soft); margin-top:8px;}
+.reset-link a{color:#b06a6a; font-weight:700; text-decoration:underline; cursor:pointer;}
 
 /* ---------------- APIキー設定パネル ---------------- */
 .api-card{margin-top:16px;}

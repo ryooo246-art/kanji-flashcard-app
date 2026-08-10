@@ -14,6 +14,7 @@ const state = {
   mediaRecorder: null,
   audioChunks: [],
   orderMode: 'random',
+  mistakes: {},            // "grade:kanji" -> 間違えた回数(localStorageに保存)
 };
 
 // 出題カテゴリ一覧。fileが無いものは自動的に「じゅんびちゅう」表示になる。
@@ -28,6 +29,7 @@ const CATEGORIES = [
   { id: 6, label: '6年生', file: 'data/grade6.csv' },
 ];
 const CATEGORY_LABELS = Object.fromEntries(CATEGORIES.map(c => [c.id, c.label]));
+CATEGORY_LABELS.review = '🔁 にがてな かんじ';
 
 const PRAISE_WORDS = [
   'すごい！', 'やったね！', 'かんぺき！', 'その ちょうし！', 'てんさい！',
@@ -80,6 +82,26 @@ function shuffle(arr){
 function renderGradeList(){
   const list = document.getElementById('grade-list');
   list.innerHTML = '';
+
+  // 苦手復習モード(これまでに間違えた記録があるときだけ選べる)
+  const reviewKanjiCount = Object.values(state.mistakes).filter(c => c > 0).length;
+  const reviewItem = document.createElement('div');
+  reviewItem.className = 'grade-item' + (reviewKanjiCount > 0 ? '' : ' disabled');
+  reviewItem.innerHTML = `
+    <input type="checkbox" id="grade-review" ${reviewKanjiCount > 0 ? '' : 'disabled'}>
+    <label for="grade-review">
+      <span>🔁 にがてな かんじ</span>
+      ${reviewKanjiCount > 0 ? `<span class="badge-count">${reviewKanjiCount}字</span>` : `<span class="badge-soon">きろくなし</span>`}
+    </label>`;
+  list.appendChild(reviewItem);
+  if(reviewKanjiCount > 0){
+    const cb = reviewItem.querySelector('input');
+    cb.addEventListener('change', ()=>{
+      reviewItem.classList.toggle('checked', cb.checked);
+      updateStartButton();
+    });
+  }
+
   for(const cat of CATEGORIES){
     const has = !!state.wordsByGrade[cat.id] && state.wordsByGrade[cat.id].length>0;
     const item = document.createElement('div');
@@ -102,11 +124,17 @@ function renderGradeList(){
       if(cb.checked) item.classList.add('checked');
     }
   }
+
+  const resetLink = document.getElementById('reset-mistakes-link');
+  resetLink.classList.toggle('hidden', reviewKanjiCount === 0);
+
   updateStartButton();
 }
 
 function getSelectedGrades(){
   const grades = [];
+  const reviewCb = document.getElementById('grade-review');
+  if(reviewCb && !reviewCb.disabled && reviewCb.checked) grades.push('review');
   for(const cat of CATEGORIES){
     const cb = document.getElementById(`grade-${cat.id}`);
     if(cb && !cb.disabled && cb.checked) grades.push(cat.id);
@@ -123,9 +151,34 @@ function updateStartButton(){
 }
 
 /* ---------------- 出題キュー作成 ---------------- */
+function mistakeKey(w){ return `${w.grade}:${w.kanji}`; }
+
+function getReviewWords(){
+  const entries = Object.entries(state.mistakes).filter(([,c]) => c > 0);
+  entries.sort((a,b) => b[1]-a[1]); // 苦手なもの(回数が多いもの)を先頭に
+  const result = [];
+  for(const [key] of entries){
+    const idx = key.indexOf(':');
+    const gradeStr = key.slice(0, idx);
+    const kanji = key.slice(idx+1);
+    const grade = /^\d+$/.test(gradeStr) ? Number(gradeStr) : gradeStr;
+    result.push(...state.allWords.filter(w => w.grade === grade && w.kanji === kanji));
+  }
+  return result;
+}
+
 function buildQueue(){
   const grades = getSelectedGrades();
-  let words = state.allWords.filter(w => grades.includes(w.grade));
+  const normalGrades = grades.filter(g => g !== 'review');
+  let words = state.allWords.filter(w => normalGrades.includes(w.grade));
+
+  if(grades.includes('review')){
+    const seen = new Set(words.map(w => w.grade+':'+w.word));
+    for(const w of getReviewWords()){
+      const key = w.grade+':'+w.word;
+      if(!seen.has(key)){ words.push(w); seen.add(key); }
+    }
+  }
 
   // 漢字ごとにグループ化 -> 漢字の順番をシャッフル(または維持) -> 各漢字内の単語もシャッフル
   const byKanji = {};
@@ -646,12 +699,43 @@ function isReadingMatch(heard, target){
   return editDistance(h, t) <= 1;
 }
 
+/* ---------------- 苦手記録(学年をまたいでlocalStorageに保存) ---------------- */
+const MISTAKES_STORE = 'kanji_mistakes_v1';
+
+async function loadMistakes(){
+  const raw = await store.get(MISTAKES_STORE);
+  if(raw){
+    try{ state.mistakes = JSON.parse(raw) || {}; }catch(e){ state.mistakes = {}; }
+  }else{
+    state.mistakes = {};
+  }
+}
+
+function persistMistakes(){
+  store.set(MISTAKES_STORE, JSON.stringify(state.mistakes)).catch(()=>{});
+}
+
+function recordMistake(w){
+  const key = mistakeKey(w);
+  state.mistakes[key] = (state.mistakes[key] || 0) + 1;
+  persistMistakes();
+}
+
+function reduceMistake(w){
+  const key = mistakeKey(w);
+  if(state.mistakes[key]){
+    state.mistakes[key] -= 1;
+    if(state.mistakes[key] <= 0) delete state.mistakes[key];
+    persistMistakes();
+  }
+}
+
 /* ---------------- 正解・不正解の処理 ---------------- */
 function onCorrect(){
+  const q = state.queue[state.qIndex];
   state.correctCount++;
   state.stars++;
   document.getElementById('star-count').textContent = state.stars;
-  const q = state.queue[state.qIndex];
   const praise = PRAISE_WORDS[Math.floor(Math.random()*PRAISE_WORDS.length)];
   showFeedback('ok', praise);
   showPraiseToast(praise);
@@ -661,12 +745,25 @@ function onCorrect(){
   const hint = document.getElementById('reading-hint');
   hint.textContent = q.reading;
   hint.classList.remove('hidden');
+
+  // このセッション中に一度でも間違えた単語は、3〜6問後にもう一度出題する
+  if(state.currentAttemptFails > 0 && !q._reinserted){
+    const gap = 3 + Math.floor(Math.random()*4);
+    const insertPos = Math.min(state.qIndex + 1 + gap, state.queue.length);
+    state.queue.splice(insertPos, 0, Object.assign({}, q, {_reinserted:true}));
+  }
+
+  // 正解できたので苦手記録を少しやわらげる(できるようになってきたサイン)
+  reduceMistake(q);
+
   state.qIndex++;
   setTimeout(proceedAfterAnswer, 2000);
 }
 
 function onIncorrect(heard){
+  const q = state.queue[state.qIndex];
   state.currentAttemptFails++;
+  recordMistake(q);
   const msg = GENTLE_WORDS[Math.floor(Math.random()*GENTLE_WORDS.length)];
   showFeedback('ng', msg);
   const card = document.getElementById('flash-card');
@@ -813,11 +910,20 @@ function bindEvents(){
   });
   document.getElementById('btn-checkpoint-continue').addEventListener('click', renderQuestion);
   document.getElementById('btn-checkpoint-stop').addEventListener('click', finishSession);
+  document.getElementById('reset-mistakes-btn').addEventListener('click', (e)=>{
+    e.preventDefault();
+    if(confirm('にがてな かんじの きろくを けしますか？')){
+      state.mistakes = {};
+      persistMistakes();
+      renderGradeList();
+    }
+  });
 }
 
 (async function init(){
   bindEvents();
   await loadApiKey();
+  await loadMistakes();
   await loadData();
   renderGradeList();
 })();
