@@ -240,7 +240,7 @@ function finishSession(){
 
 /* ---------------- マイク録音(音量を見て自動でストップ) ---------------- */
 const SPEECH_THRESHOLD = 0.02;   // これを超えたら「話している」とみなす音量
-const SILENCE_HOLD_MS = 700;     // 話した後、これだけ静かが続いたら自動ストップ
+const SILENCE_HOLD_MS = 450;     // 話した後、これだけ静かが続いたら自動ストップ
 const MIN_RECORD_MS = 350;       // 誤タップ対策：最低でもこれだけは録音する
 const MAX_RECORD_MS = 6000;      // 安全のための最大録音時間
 
