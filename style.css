@@ -166,7 +166,26 @@ h1,h2{font-family:'Mochiy Pop One', sans-serif; font-weight:400; margin:0;}
 .stars-count{font-weight:900; color:#c9962a; background:#fff; padding:6px 12px; border-radius:999px; box-shadow:var(--shadow); font-size:.95rem;}
 
 .stage{width:100%; display:flex; flex-direction:column; align-items:center; position:relative; margin-top:6px;}
-.mascot-plant{font-size:3rem; margin-bottom:4px; transition:transform .3s;}
+.mascot-row{display:flex; align-items:flex-end; justify-content:center; gap:14px; margin-bottom:4px;}
+.mascot-plant{font-size:3rem; transition:transform .3s;}
+.mascot-beaver{
+  width:76px; height:auto;
+  filter:drop-shadow(0 6px 8px rgba(63,169,138,.25));
+  animation:bob 3.4s ease-in-out infinite;
+  transform-origin:center bottom;
+}
+.mascot-beaver.happy{
+  animation:beaver-happy 1.4s ease;
+}
+@keyframes beaver-happy{
+  0%{transform:scale(1) rotate(0) translateY(0);}
+  15%{transform:scale(1.18) rotate(-10deg) translateY(-6px);}
+  30%{transform:scale(0.92) rotate(8deg) translateY(2px);}
+  45%{transform:scale(1.15) rotate(-8deg) translateY(-22px);}
+  60%{transform:scale(1) rotate(6deg) translateY(0);}
+  75%{transform:scale(1.08) rotate(-4deg) translateY(-8px);}
+  100%{transform:scale(1) rotate(0) translateY(0);}
+}
 
 .card{
   width:100%;

@@ -231,6 +231,7 @@ function renderQuestion(){
   hint.classList.add('hidden');
   document.getElementById('feedback-bubble').classList.add('hidden');
   state.currentAttemptFails = 0;
+  state.hintRevealCount = 0;
 
   const total = state.queue.length;
   document.getElementById('progress-label').textContent = `${state.qIndex} / ${total}`;
@@ -693,7 +694,10 @@ function isReadingMatch(heard, target){
   const t = normalizeReading(target);
   if(!h) return false;
   if(h === t) return true;
-  // 短い単語(3文字以下)は完全一致のみ正解。誤読と聞き間違いを混同しないため厳しめにする。
+  // 「ん」のような1文字の読みは、「うん」「んー」のように前後に音がついて
+  // 聞き取られることが多いため、その文字が含まれていれば正解にする。
+  if(t.length === 1) return h.includes(t);
+  // 短い単語(2〜3文字)は完全一致のみ正解。誤読と聞き間違いを混同しないため厳しめにする。
   if(t.length <= 3) return false;
   // 4文字以上は、聞き取りの揺れ(促音の有無など)を1文字分だけ許容する。
   return editDistance(h, t) <= 1;
@@ -730,6 +734,34 @@ function reduceMistake(w){
   }
 }
 
+/* ---------------- ヒント(1文字ずつ表示) ---------------- */
+function revealNextHintChar(){
+  const q = state.queue[state.qIndex];
+  if(!q) return;
+  state.hintRevealCount = Math.min((state.hintRevealCount||0) + 1, q.reading.length);
+  const hint = document.getElementById('reading-hint');
+  const chars = q.reading.split('');
+  hint.textContent = chars.map((c,i)=> i < state.hintRevealCount ? c : '？').join('');
+  hint.classList.remove('hidden');
+}
+
+/* ---------------- スキップ(読みを2秒表示してから次へ) ---------------- */
+function onSkip(){
+  const q = state.queue[state.qIndex];
+  if(!q) return;
+  const hint = document.getElementById('reading-hint');
+  hint.textContent = q.reading;
+  hint.classList.remove('hidden');
+  document.getElementById('btn-skip').disabled = true;
+  document.getElementById('btn-hint').disabled = true;
+  state.qIndex++;
+  setTimeout(()=>{
+    document.getElementById('btn-skip').disabled = false;
+    document.getElementById('btn-hint').disabled = false;
+    proceedAfterAnswer();
+  }, 2000);
+}
+
 /* ---------------- 正解・不正解の処理 ---------------- */
 function onCorrect(){
   const q = state.queue[state.qIndex];
@@ -741,6 +773,7 @@ function onCorrect(){
   showPraiseToast(praise);
   playChime();
   fireCelebration();
+  playMascotHappy();
   // 正解の読みを2秒間表示してから次の問題へ
   const hint = document.getElementById('reading-hint');
   hint.textContent = q.reading;
@@ -769,7 +802,7 @@ function onIncorrect(heard){
   const card = document.getElementById('flash-card');
   card.classList.remove('shake-soft'); void card.offsetWidth; card.classList.add('shake-soft');
   if(state.currentAttemptFails >= 2){
-    document.getElementById('reading-hint').classList.remove('hidden');
+    revealNextHintChar();
   }
 }
 
@@ -812,6 +845,14 @@ function playChime(){
 
 /* ---------------- ごほうび演出(数バージョン) ---------------- */
 const CELEBRATIONS = ['confetti', 'sparkle', 'petal', 'ribbon'];
+
+function playMascotHappy(){
+  const el = document.getElementById('mascot-beaver');
+  if(!el) return;
+  el.classList.remove('happy');
+  void el.offsetWidth; // reflowでアニメ再トリガー
+  el.classList.add('happy');
+}
 
 function fireCelebration(){
   const type = CELEBRATIONS[Math.floor(Math.random()*CELEBRATIONS.length)];
@@ -901,13 +942,8 @@ function bindEvents(){
   document.getElementById('btn-home').addEventListener('click', ()=>showScreen('screen-setup'));
   document.getElementById('btn-again').addEventListener('click', ()=>{ state.stars = 0; startSession(); });
   document.getElementById('btn-mic').addEventListener('click', toggleRecording);
-  document.getElementById('btn-hint').addEventListener('click', ()=>{
-    document.getElementById('reading-hint').classList.remove('hidden');
-  });
-  document.getElementById('btn-skip').addEventListener('click', ()=>{
-    state.qIndex++;
-    proceedAfterAnswer();
-  });
+  document.getElementById('btn-hint').addEventListener('click', revealNextHintChar);
+  document.getElementById('btn-skip').addEventListener('click', onSkip);
   document.getElementById('btn-checkpoint-continue').addEventListener('click', renderQuestion);
   document.getElementById('btn-checkpoint-stop').addEventListener('click', finishSession);
   document.getElementById('reset-mistakes-btn').addEventListener('click', (e)=>{

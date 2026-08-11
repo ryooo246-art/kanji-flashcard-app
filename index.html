@@ -26,6 +26,27 @@
     <p class="app-sub">よんで、おぼえて、レベルアップ！</p>
   </header>
 
+  <div class="setup-card">
+    <h2 class="setup-heading">がくねんを えらんでね</h2>
+    <div class="grade-list" id="grade-list">
+      <!-- JSで生成 -->
+    </div>
+
+    <div class="setup-options">
+      <label class="option-row">
+        <span>もんだいの すすめかた</span>
+        <select id="order-mode" class="cute-select">
+          <option value="random">じゅんばん バラバラ</option>
+          <option value="inorder">じゅんばん どおり</option>
+        </select>
+      </label>
+    </div>
+
+    <button id="btn-start" class="btn-primary" disabled>スタート！</button>
+    <p class="setup-hint" id="setup-hint">がくねんに チェックをいれてね</p>
+    <p class="reset-link hidden" id="reset-mistakes-link">🔁の きろくを <a href="#" id="reset-mistakes-btn">リセットする</a></p>
+  </div>
+
   <div class="setup-card api-card">
     <h2 class="setup-heading">Gemini APIキー設定</h2>
     <div class="api-row">
@@ -50,27 +71,6 @@
       入力したキーはこの端末のブラウザにのみ保存され、外部には送信されません。
     </p>
   </div>
-
-  <div class="setup-card">
-    <h2 class="setup-heading">がくねんを えらんでね</h2>
-    <div class="grade-list" id="grade-list">
-      <!-- JSで生成 -->
-    </div>
-
-    <div class="setup-options">
-      <label class="option-row">
-        <span>もんだいの すすめかた</span>
-        <select id="order-mode" class="cute-select">
-          <option value="random">じゅんばん バラバラ</option>
-          <option value="inorder">じゅんばん どおり</option>
-        </select>
-      </label>
-    </div>
-
-    <button id="btn-start" class="btn-primary" disabled>スタート！</button>
-    <p class="setup-hint" id="setup-hint">がくねんに チェックをいれてね</p>
-    <p class="reset-link hidden" id="reset-mistakes-link">🔁の きろくを <a href="#" id="reset-mistakes-btn">リセットする</a></p>
-  </div>
 </section>
 
 <!-- ============ 画面2: フラッシュカード本体 ============ -->
@@ -85,7 +85,10 @@
   </header>
 
   <div class="stage">
-    <div class="mascot-plant" id="mascot-plant">🌱</div>
+    <div class="mascot-row">
+      <div class="mascot-plant" id="mascot-plant">🌱</div>
+      <img class="mascot-beaver" id="mascot-beaver" src="assets/mascot-beaver.png" alt="マスコット">
+    </div>
 
     <div class="card" id="flash-card">
       <div class="kanji-badge" id="kanji-badge">一</div>
