@@ -846,12 +846,22 @@ function playChime(){
 /* ---------------- ごほうび演出(数バージョン) ---------------- */
 const CELEBRATIONS = ['confetti', 'sparkle', 'petal', 'ribbon'];
 
+const MASCOT_NORMAL_SRC = 'assets/mascot-beaver.png';
+const MASCOT_HAPPY_SRC = 'assets/mascot-beaver-happy.png';
+// 事前読み込みしておき、正解時に一瞬で切り替わるようにする
+new Image().src = MASCOT_HAPPY_SRC;
+
 function playMascotHappy(){
   const el = document.getElementById('mascot-beaver');
   if(!el) return;
+  el.src = MASCOT_HAPPY_SRC;
   el.classList.remove('happy');
   void el.offsetWidth; // reflowでアニメ再トリガー
   el.classList.add('happy');
+  clearTimeout(state._mascotRevertTimer);
+  state._mascotRevertTimer = setTimeout(()=>{
+    el.src = MASCOT_NORMAL_SRC;
+  }, 1600);
 }
 
 function fireCelebration(){
