@@ -93,12 +93,18 @@
     <div class="card" id="flash-card">
       <div class="kanji-badge" id="kanji-badge">一</div>
       <div class="word-display" id="word-display">一つ</div>
-      <div class="reading-hint hidden" id="reading-hint"></div>
     </div>
+
+    <div class="kana-quiz hidden" id="kana-quiz">
+      <button id="btn-play-audio" class="btn-speaker">🔊 きいてみよう</button>
+      <div class="quiz-choices" id="quiz-choices"></div>
+    </div>
+
+    <div class="reading-hint hidden" id="reading-hint"></div>
 
     <div class="feedback-bubble hidden" id="feedback-bubble"></div>
 
-    <div class="mic-area">
+    <div class="mic-area" id="mic-area">
       <button id="btn-mic" class="btn-mic">
         <span class="mic-icon">🎤</span>
         <span class="mic-label" id="mic-label">タップして よんでね</span>
@@ -108,7 +114,7 @@
       </div>
     </div>
 
-    <div class="helper-row">
+    <div class="helper-row" id="helper-row">
       <button id="btn-hint" class="btn-secondary">💡 ヒント</button>
       <button id="btn-skip" class="btn-secondary">➡️ つぎへ</button>
     </div>

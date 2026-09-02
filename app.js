@@ -221,11 +221,25 @@ function renderQuestion(){
     return;
   }
   const q = state.queue[state.qIndex];
-  const badge = document.getElementById('kanji-badge');
-  badge.textContent = q.kanji;
-  // ひらがな/カタカナ練習は単語表示とバッジが同じ文字になるので、バッジは隠す
-  badge.classList.toggle('hidden', q.kanji === q.word);
-  document.getElementById('word-display').textContent = q.word;
+  const isKanaQuiz = (q.grade === 'hiragana' || q.grade === 'katakana');
+
+  document.getElementById('flash-card').classList.toggle('hidden', isKanaQuiz);
+  document.getElementById('mic-area').classList.toggle('hidden', isKanaQuiz);
+  document.getElementById('btn-hint').classList.toggle('hidden', isKanaQuiz);
+  document.getElementById('kana-quiz').classList.toggle('hidden', !isKanaQuiz);
+
+  if(isKanaQuiz){
+    state._quizAnswered = false;
+    buildQuizChoices(q);
+    speakReading(q.reading);
+  }else{
+    const badge = document.getElementById('kanji-badge');
+    badge.textContent = q.kanji;
+    // ひらがな/カタカナ練習は単語表示とバッジが同じ文字になるので、バッジは隠す
+    badge.classList.toggle('hidden', q.kanji === q.word);
+    document.getElementById('word-display').textContent = q.word;
+  }
+
   const hint = document.getElementById('reading-hint');
   hint.textContent = q.reading;
   hint.classList.add('hidden');
@@ -243,6 +257,47 @@ function renderQuestion(){
   const card = document.getElementById('flash-card');
   card.classList.remove('shake-soft');
   void card.offsetWidth; // reflow でアニメ再トリガー
+}
+
+/* ---------------- かなクイズ(音声を聞いて4択) ---------------- */
+function speakReading(text){
+  if(!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'ja-JP';
+  u.rate = 0.85;
+  window.speechSynthesis.speak(u);
+}
+
+function buildQuizChoices(q){
+  const container = document.getElementById('quiz-choices');
+  container.innerHTML = '';
+  const pool = (state.wordsByGrade[q.grade] || []).map(w => w.kanji);
+  const uniquePool = Array.from(new Set(pool)).filter(k => k !== q.kanji);
+  const distractors = shuffle(uniquePool).slice(0, 3);
+  const options = shuffle([q.kanji, ...distractors]);
+  for(const opt of options){
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'quiz-choice-btn';
+    btn.textContent = opt;
+    btn.addEventListener('click', ()=> handleQuizAnswer(opt, q, btn));
+    container.appendChild(btn);
+  }
+}
+
+function handleQuizAnswer(selected, q, btnEl){
+  if(state._quizAnswered) return;
+  if(selected === q.kanji){
+    state._quizAnswered = true;
+    btnEl.classList.add('correct');
+    document.querySelectorAll('.quiz-choice-btn').forEach(b => b.disabled = true);
+    onCorrect();
+  }else{
+    btnEl.classList.add('wrong');
+    btnEl.disabled = true;
+    onIncorrect('');
+  }
 }
 
 function updateMascotGrowth(){
@@ -799,8 +854,10 @@ function onIncorrect(heard){
   recordMistake(q);
   const msg = GENTLE_WORDS[Math.floor(Math.random()*GENTLE_WORDS.length)];
   showFeedback('ng', msg);
-  const card = document.getElementById('flash-card');
-  card.classList.remove('shake-soft'); void card.offsetWidth; card.classList.add('shake-soft');
+  const shakeTarget = document.getElementById('kana-quiz').classList.contains('hidden')
+    ? document.getElementById('flash-card')
+    : document.getElementById('kana-quiz');
+  shakeTarget.classList.remove('shake-soft'); void shakeTarget.offsetWidth; shakeTarget.classList.add('shake-soft');
   if(state.currentAttemptFails >= 2){
     revealNextHintChar();
   }
@@ -950,6 +1007,10 @@ function bindEvents(){
   document.getElementById('btn-start').addEventListener('click', startSession);
   document.getElementById('btn-back').addEventListener('click', ()=>showScreen('screen-setup'));
   document.getElementById('btn-home').addEventListener('click', ()=>showScreen('screen-setup'));
+  document.getElementById('btn-play-audio').addEventListener('click', ()=>{
+    const q = state.queue[state.qIndex];
+    if(q) speakReading(q.reading);
+  });
   document.getElementById('btn-again').addEventListener('click', ()=>{ state.stars = 0; startSession(); });
   document.getElementById('btn-mic').addEventListener('click', toggleRecording);
   document.getElementById('btn-hint').addEventListener('click', revealNextHintChar);

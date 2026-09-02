@@ -215,7 +215,7 @@ h1,h2{font-family:'Mochiy Pop One', sans-serif; font-weight:400; margin:0;}
   margin-top:14px;
   letter-spacing:.04em;
 }
-.reading-hint{margin-top:10px; font-size:1.1rem; color:var(--mint-deep-2); font-weight:700;}
+.reading-hint{margin-top:10px; font-size:1.1rem; color:var(--mint-deep-2); font-weight:700; text-align:center;}
 
 .feedback-bubble{
   margin-top:14px; padding:10px 22px; border-radius:999px;
@@ -256,6 +256,41 @@ h1,h2{font-family:'Mochiy Pop One', sans-serif; font-weight:400; margin:0;}
 @keyframes eq{0%,100%{height:6px;} 50%{height:22px;}}
 
 .helper-row{display:flex; gap:14px; margin-top:26px;}
+
+/* ---------------- かなクイズ(ひらがな/カタカナ用) ---------------- */
+.kana-quiz{width:100%; display:flex; flex-direction:column; align-items:center; margin-top:22px;}
+.btn-speaker{
+  font-family:'Mochiy Pop One', sans-serif;
+  font-size:1.1rem;
+  color:#fff;
+  background:linear-gradient(135deg, var(--sky), #6cb8e8);
+  border:none; border-radius:999px;
+  padding:16px 34px;
+  box-shadow:var(--shadow);
+  cursor:pointer;
+  transition:transform .12s ease;
+}
+.btn-speaker:active{transform:scale(.95);}
+.quiz-choices{
+  display:grid; grid-template-columns:1fr 1fr; gap:14px;
+  width:100%; margin-top:22px;
+}
+.quiz-choice-btn{
+  font-family:'Mochiy Pop One', sans-serif;
+  font-size:2.2rem;
+  padding:18px 0;
+  border-radius:var(--radius-md);
+  border:3px solid var(--mint-bg-2);
+  background:#fff;
+  color:var(--text);
+  box-shadow:var(--shadow);
+  cursor:pointer;
+  transition:transform .12s ease, border-color .15s, background .15s;
+}
+.quiz-choice-btn:active{transform:scale(.95);}
+.quiz-choice-btn:disabled{cursor:default;}
+.quiz-choice-btn.correct{background:#E3FBEF; border-color:var(--mint-deep); color:var(--mint-deep-2);}
+.quiz-choice-btn.wrong{background:#FFF3E0; border-color:#e0a75c; color:#b8792a; opacity:.6;}
 
 /* ---------- 画面3: 終了 ---------- */
 .done-card{
