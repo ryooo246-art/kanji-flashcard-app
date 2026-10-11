@@ -1,6 +1,9 @@
 /* ==========================================================
    かんじカード - メインロジック
+   version: v2.0 (2026-10-04)
+   v2.0: カタカナの行チェック / 漢字の4択(音声認識とラジオ切替) / 選択肢の自動生成
    ========================================================== */
+const APP_VERSION = 'v2.0';
 
 const state = {
   allWords: [],          // CSV全件 [{grade,kanji,word,reading}]
@@ -14,6 +17,9 @@ const state = {
   mediaRecorder: null,
   audioChunks: [],
   orderMode: 'random',
+  answerMode: 'choice',    // 'choice'(4択) | 'voice'(音声認識)  ※漢字の学年のみ
+  katakanaRows: ['a-sa', 'ta-ha', 'ma-n'], // 出題するカタカナの行(チェック済み)
+  _qMode: 'voice',         // 今の問題の出題形式: 'kana' | 'choice' | 'voice'
   mistakes: {},            // "grade:kanji" -> 間違えた回数(localStorageに保存)
 };
 
@@ -30,6 +36,13 @@ const CATEGORIES = [
 ];
 const CATEGORY_LABELS = Object.fromEntries(CATEGORIES.map(c => [c.id, c.label]));
 CATEGORY_LABELS.review = '🔁 にがてな かんじ';
+
+// カタカナの出題範囲(メイン画面のチェックボックスと対応)
+const KATAKANA_ROWS = [
+  { id: 'a-sa', label: 'ア〜サ行', chars: 'アイウエオカキクケコサシスセソ' },
+  { id: 'ta-ha', label: 'タ〜ハ行', chars: 'タチツテトナニヌネノハヒフヘホ' },
+  { id: 'ma-n', label: 'マ〜ン', chars: 'マミムメモヤユヨラリルレロワヲン' },
+];
 
 const PRAISE_WORDS = [
   'すごい！', 'やったね！', 'かんぺき！', 'その ちょうし！', 'てんさい！',
@@ -51,12 +64,17 @@ async function loadData(){
       if(!res.ok) continue;
       const text = await res.text();
       const lines = text.trim().split('\n').slice(1); // ヘッダー除外
-      for(const line of lines){
+      for(const rawLine of lines){
+        const line = rawLine.replace(/\r$/, '');
         if(!line.trim()) continue;
-        const [g, kanji, word, reading] = line.split(',');
+        // 5列目 choices は任意。「まぎらわしい読み」を | 区切りで書くと4択の不正解に使われる
+        const [g, kanji, word, reading, choicesRaw] = line.split(',');
         // 数字にできるものは学年(数値)、できないものはカテゴリ名(ひらがな等)のまま保持
         const gradeId = /^\d+$/.test(g) ? Number(g) : g;
-        state.allWords.push({ grade: gradeId, kanji, word, reading });
+        const choices = choicesRaw
+          ? choicesRaw.split('|').map(x => x.trim()).filter(Boolean)
+          : null;
+        state.allWords.push({ grade: gradeId, kanji, word, reading, choices });
       }
     }catch(e){
       console.warn(`${cat.file} の読み込みに失敗しました`, e);
@@ -123,6 +141,30 @@ function renderGradeList(){
       });
       if(cb.checked) item.classList.add('checked');
     }
+
+    // カタカナだけ、出題する行を選ぶチェックボックスを表示する
+    if(cat.id === 'katakana' && has){
+      const sub = document.createElement('div');
+      sub.className = 'sub-options hidden';
+      sub.id = 'katakana-rows';
+      sub.innerHTML = KATAKANA_ROWS.map(r => `
+        <label class="sub-check">
+          <input type="checkbox" class="kata-row-cb" value="${r.id}" ${state.katakanaRows.includes(r.id) ? 'checked' : ''}>
+          <span>${r.label}</span>
+        </label>`).join('');
+      list.appendChild(sub);
+
+      const kataCb = item.querySelector('input');
+      kataCb.addEventListener('change', ()=>{ sub.classList.toggle('hidden', !kataCb.checked); });
+      sub.querySelectorAll('.kata-row-cb').forEach(rcb => {
+        rcb.addEventListener('change', ()=>{
+          state.katakanaRows = Array.from(sub.querySelectorAll('.kata-row-cb'))
+            .filter(c => c.checked).map(c => c.value);
+          store.set(KATA_ROWS_STORE, JSON.stringify(state.katakanaRows));
+          updateStartButton();
+        });
+      });
+    }
   }
 
   const resetLink = document.getElementById('reset-mistakes-link');
@@ -146,8 +188,23 @@ function updateStartButton(){
   const grades = getSelectedGrades();
   const btn = document.getElementById('btn-start');
   const hint = document.getElementById('setup-hint');
-  btn.disabled = grades.length === 0;
-  hint.textContent = grades.length === 0 ? 'がくねんに チェックをいれてね' : `${grades.map(g=>CATEGORY_LABELS[g]).join('・')} で スタートできるよ`;
+  const kataNoRow = grades.includes('katakana') && state.katakanaRows.length === 0;
+  btn.disabled = grades.length === 0 || kataNoRow;
+  if(grades.length === 0){
+    hint.textContent = 'がくねんに チェックをいれてね';
+  }else if(kataNoRow){
+    hint.textContent = 'カタカナの ぎょうに チェックをいれてね';
+  }else{
+    hint.textContent = `${grades.map(g=>CATEGORY_LABELS[g]).join('・')} で スタートできるよ`;
+  }
+}
+
+function getSelectedKatakanaChars(){
+  const set = new Set();
+  for(const r of KATAKANA_ROWS){
+    if(state.katakanaRows.includes(r.id)) r.chars.split('').forEach(c => set.add(c));
+  }
+  return set;
 }
 
 /* ---------------- 出題キュー作成 ---------------- */
@@ -171,6 +228,9 @@ function buildQueue(){
   const grades = getSelectedGrades();
   const normalGrades = grades.filter(g => g !== 'review');
   let words = state.allWords.filter(w => normalGrades.includes(w.grade));
+  // カタカナは、チェックが入っている行の文字だけ出題する
+  const kataChars = getSelectedKatakanaChars();
+  words = words.filter(w => w.grade !== 'katakana' || kataChars.has(w.kanji));
 
   if(grades.includes('review')){
     const seen = new Set(words.map(w => w.grade+':'+w.word));
@@ -207,6 +267,8 @@ function showScreen(id){
 /* ---------------- ゲーム進行 ---------------- */
 function startSession(){
   state.orderMode = document.getElementById('order-mode').value;
+  const modeRadio = document.querySelector('input[name="answer-mode"]:checked');
+  state.answerMode = modeRadio ? modeRadio.value : 'choice';
   state.queue = buildQueue();
   state.qIndex = 0;
   state.correctCount = 0;
@@ -222,22 +284,27 @@ function renderQuestion(){
   }
   const q = state.queue[state.qIndex];
   const isKanaQuiz = (q.grade === 'hiragana' || q.grade === 'katakana');
+  // kana: 音声を聞いて文字を選ぶ / choice: 単語を見て読みを選ぶ / voice: 単語を見て声で答える
+  const mode = isKanaQuiz ? 'kana' : (state.answerMode === 'voice' ? 'voice' : 'choice');
+  state._qMode = mode;
+  state._quizAnswered = false;
 
-  document.getElementById('flash-card').classList.toggle('hidden', isKanaQuiz);
-  document.getElementById('mic-area').classList.toggle('hidden', isKanaQuiz);
-  document.getElementById('btn-hint').classList.toggle('hidden', isKanaQuiz);
-  document.getElementById('kana-quiz').classList.toggle('hidden', !isKanaQuiz);
+  document.getElementById('flash-card').classList.toggle('hidden', mode === 'kana');
+  document.getElementById('kana-quiz').classList.toggle('hidden', mode !== 'kana');
+  document.getElementById('reading-quiz').classList.toggle('hidden', mode !== 'choice');
+  document.getElementById('mic-area').classList.toggle('hidden', mode !== 'voice');
+  document.getElementById('btn-hint').classList.toggle('hidden', mode === 'kana');
+  document.getElementById('btn-hint').disabled = false;
 
-  if(isKanaQuiz){
-    state._quizAnswered = false;
+  if(mode === 'kana'){
     buildQuizChoices(q);
     speakReading(q.reading);
   }else{
     const badge = document.getElementById('kanji-badge');
     badge.textContent = q.kanji;
-    // ひらがな/カタカナ練習は単語表示とバッジが同じ文字になるので、バッジは隠す
     badge.classList.toggle('hidden', q.kanji === q.word);
     document.getElementById('word-display').textContent = q.word;
+    if(mode === 'choice') buildReadingChoices(q);
   }
 
   const hint = document.getElementById('reading-hint');
@@ -272,23 +339,34 @@ function speakReading(text){
 function buildQuizChoices(q){
   const container = document.getElementById('quiz-choices');
   container.innerHTML = '';
-  const pool = (state.wordsByGrade[q.grade] || []).map(w => w.kanji);
+  let pool = (state.wordsByGrade[q.grade] || []).map(w => w.kanji);
+  if(q.grade === 'katakana'){
+    // 不正解の候補も、チェックが入っている行の中から選ぶ
+    const allowed = getSelectedKatakanaChars();
+    const filtered = pool.filter(k => allowed.has(k) || k === q.kanji);
+    if(new Set(filtered).size >= 4) pool = filtered;
+  }
   const uniquePool = Array.from(new Set(pool)).filter(k => k !== q.kanji);
   const distractors = shuffle(uniquePool).slice(0, 3);
   const options = shuffle([q.kanji, ...distractors]);
   for(const opt of options){
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'quiz-choice-btn';
-    btn.textContent = opt;
-    btn.addEventListener('click', ()=> handleQuizAnswer(opt, q, btn));
-    container.appendChild(btn);
+    addChoiceButton(container, opt, opt === q.kanji, '');
   }
 }
 
-function handleQuizAnswer(selected, q, btnEl){
+function addChoiceButton(container, label, isCorrect, extraClass){
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'quiz-choice-btn' + (extraClass ? ' ' + extraClass : '');
+  btn.textContent = label;
+  btn.dataset.correct = isCorrect ? '1' : '0';
+  btn.addEventListener('click', ()=> handleChoiceAnswer(btn));
+  container.appendChild(btn);
+}
+
+function handleChoiceAnswer(btnEl){
   if(state._quizAnswered) return;
-  if(selected === q.kanji){
+  if(btnEl.dataset.correct === '1'){
     state._quizAnswered = true;
     btnEl.classList.add('correct');
     document.querySelectorAll('.quiz-choice-btn').forEach(b => b.disabled = true);
@@ -298,6 +376,83 @@ function handleQuizAnswer(selected, q, btnEl){
     btnEl.disabled = true;
     onIncorrect('');
   }
+}
+
+/* ---------------- 漢字の4択(実在する言葉の読みから選択肢を作る) ---------------- */
+// 全学年の単語から「読みの一覧」と「単語→正しい読みの一覧」を一度だけ作る。
+// 選んだ学年だけでなく全学年から集めるので、1年生だけを選んでも候補が足りる。
+function ensureReadingIndex(){
+  if(state._readingIndex) return;
+  const readings = [];
+  const seen = new Set();
+  const wordReadings = new Map();
+  for(const w of state.allWords){
+    if(w.grade === 'hiragana' || w.grade === 'katakana') continue;
+    if(!wordReadings.has(w.word)) wordReadings.set(w.word, new Set());
+    wordReadings.get(w.word).add(w.reading);
+    if(!seen.has(w.reading)){
+      seen.add(w.reading);
+      readings.push(w.reading);
+    }
+  }
+  state._readingIndex = { readings, wordReadings };
+}
+
+// 不正解の選択肢を3つ作る。
+// 1) CSVの choices 列に手作りの選択肢があればそれを優先
+// 2) 足りない分は、正解に似た(編集距離が近く、文字数も近い)実在の読みから選ぶ
+function pickReadingChoices(q){
+  ensureReadingIndex();
+  const { readings, wordReadings } = state._readingIndex;
+  // 同じ表記で別の読みを持つ単語(二人=ふたり/ににん など)の読みは不正解に使わない
+  const valid = wordReadings.get(q.word) || new Set([q.reading]);
+  const chosen = [];
+  const add = (r) => { if(r && !valid.has(r) && !chosen.includes(r)) chosen.push(r); };
+
+  if(q.choices) q.choices.forEach(r => { if(chosen.length < 3) add(r); });
+
+  if(chosen.length < 3){
+    const scored = readings
+      .filter(r => !valid.has(r) && !chosen.includes(r))
+      .map(r => ({
+        r,
+        s: editDistance(r, q.reading) + 0.5 * Math.abs(r.length - q.reading.length) + Math.random() * 0.4
+      }))
+      .sort((x, y) => x.s - y.s);
+    const top = scored.slice(0, 10).map(x => x.r);
+    for(const r of shuffle(top)){ if(chosen.length >= 3) break; add(r); }
+    for(const r of shuffle(readings)){ if(chosen.length >= 3) break; add(r); }
+  }
+  return chosen.slice(0, 3);
+}
+
+function buildReadingChoices(q){
+  const container = document.getElementById('reading-choices');
+  container.innerHTML = '';
+  const options = shuffle([q.reading, ...pickReadingChoices(q)]);
+  const cls = 'reading-choice' + (options.some(o => o.length >= 6) ? ' long' : '');
+  for(const opt of options){
+    addChoiceButton(container, opt, opt === q.reading, cls);
+  }
+}
+
+// 4択でのヒント: 不正解の選択肢を2つ消して、2択にする
+function useChoiceHint(){
+  const wrongs = Array.from(document.querySelectorAll('#reading-choices .quiz-choice-btn'))
+    .filter(b => b.dataset.correct !== '1' && !b.disabled);
+  const removeCount = Math.min(2, wrongs.length - 1);
+  if(removeCount > 0){
+    shuffle(wrongs).slice(0, removeCount).forEach(b => {
+      b.disabled = true;
+      b.classList.add('removed');
+    });
+  }
+  document.getElementById('btn-hint').disabled = true;
+}
+
+function onHintClick(){
+  if(state._qMode === 'choice') useChoiceHint();
+  else revealNextHintChar();
 }
 
 function updateMascotGrowth(){
@@ -479,7 +634,7 @@ async function handleRecordedAudio(){
     console.error(err);
     let msg = 'うまく はんていできなかったよ。もういちど ためしてね';
     if(err.message === 'NO_API_KEY'){
-      msg = 'APIキーが せっていされていないよ。上の せっていらんに いれてね';
+      msg = 'APIキーが せっていされていないよ。ホームの APIキーせっていに いれてね';
     } else if(err.message === 'API_400' || err.message === 'API_403'){
       msg = 'APIキーが ちがうかも。せっていを かくにんしてね';
     }
@@ -809,6 +964,13 @@ function onSkip(){
   hint.classList.remove('hidden');
   document.getElementById('btn-skip').disabled = true;
   document.getElementById('btn-hint').disabled = true;
+  if(state._qMode !== 'voice'){
+    state._quizAnswered = true;
+    document.querySelectorAll('.quiz-choice-btn').forEach(b => {
+      b.disabled = true;
+      if(b.dataset.correct === '1') b.classList.add('correct');
+    });
+  }
   state.qIndex++;
   setTimeout(()=>{
     document.getElementById('btn-skip').disabled = false;
@@ -858,7 +1020,7 @@ function onIncorrect(heard){
     ? document.getElementById('flash-card')
     : document.getElementById('kana-quiz');
   shakeTarget.classList.remove('shake-soft'); void shakeTarget.offsetWidth; shakeTarget.classList.add('shake-soft');
-  if(state.currentAttemptFails >= 2){
+  if(state.currentAttemptFails >= 2 && state._qMode !== 'choice'){
     revealNextHintChar();
   }
 }
@@ -1002,6 +1164,28 @@ function celebrateRibbon(layer){
   }
 }
 
+/* ---------------- 設定の保存・読み込み(答え方 / カタカナの行) ---------------- */
+const ANSWER_MODE_STORE = 'kanji_answer_mode_v1';
+const KATA_ROWS_STORE = 'kanji_kata_rows_v1';
+
+async function loadAnswerMode(){
+  const v = await store.get(ANSWER_MODE_STORE);
+  state.answerMode = (v === 'voice') ? 'voice' : 'choice';
+  const radio = document.querySelector(`input[name="answer-mode"][value="${state.answerMode}"]`);
+  if(radio) radio.checked = true;
+}
+
+async function loadKatakanaRows(){
+  const raw = await store.get(KATA_ROWS_STORE);
+  if(!raw) return;
+  try{
+    const arr = JSON.parse(raw);
+    if(Array.isArray(arr)){
+      state.katakanaRows = arr.filter(id => KATAKANA_ROWS.some(r => r.id === id));
+    }
+  }catch(e){ /* 壊れていたら初期値(全部ON)のまま */ }
+}
+
 /* ---------------- 初期化 ---------------- */
 function bindEvents(){
   document.getElementById('btn-start').addEventListener('click', startSession);
@@ -1013,10 +1197,17 @@ function bindEvents(){
   });
   document.getElementById('btn-again').addEventListener('click', ()=>{ state.stars = 0; startSession(); });
   document.getElementById('btn-mic').addEventListener('click', toggleRecording);
-  document.getElementById('btn-hint').addEventListener('click', revealNextHintChar);
+  document.getElementById('btn-hint').addEventListener('click', onHintClick);
   document.getElementById('btn-skip').addEventListener('click', onSkip);
   document.getElementById('btn-checkpoint-continue').addEventListener('click', renderQuestion);
   document.getElementById('btn-checkpoint-stop').addEventListener('click', finishSession);
+  document.querySelectorAll('input[name="answer-mode"]').forEach(r => {
+    r.addEventListener('change', ()=>{
+      if(!r.checked) return;
+      state.answerMode = r.value;
+      store.set(ANSWER_MODE_STORE, r.value);
+    });
+  });
   document.getElementById('reset-mistakes-btn').addEventListener('click', (e)=>{
     e.preventDefault();
     if(confirm('にがてな かんじの きろくを けしますか？')){
@@ -1029,8 +1220,12 @@ function bindEvents(){
 
 (async function init(){
   bindEvents();
+  const verEl = document.getElementById('app-version');
+  if(verEl) verEl.textContent = APP_VERSION;
   await loadApiKey();
   await loadMistakes();
+  await loadAnswerMode();
+  await loadKatakanaRows();
   await loadData();
   renderGradeList();
 })();

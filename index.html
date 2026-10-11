@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- version: v2.0 (2026-10-04) -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -24,6 +25,7 @@
     <div class="mascot" id="mascot-home">🌱</div>
     <h1 class="app-title">かんじカード</h1>
     <p class="app-sub">よんで、おぼえて、レベルアップ！</p>
+    <p class="app-version" id="app-version"></p>
   </header>
 
   <div class="setup-card">
@@ -40,6 +42,15 @@
           <option value="inorder">じゅんばん どおり</option>
         </select>
       </label>
+
+      <div class="answer-mode-block">
+        <span class="answer-mode-title">かんじの こたえかた</span>
+        <div class="radio-group" role="radiogroup" aria-label="かんじの こたえかた">
+          <label class="radio-opt"><input type="radio" name="answer-mode" value="choice" checked> えらぶ(4つから)</label>
+          <label class="radio-opt"><input type="radio" name="answer-mode" value="voice"> こえで こたえる</label>
+        </div>
+        <span class="answer-mode-note">※ ひらがな・カタカナは いつも「きいて えらぶ」だよ</span>
+      </div>
     </div>
 
     <button id="btn-start" class="btn-primary" disabled>スタート！</button>
@@ -67,7 +78,7 @@
     </div>
     <div id="keyStatus" class="api-status"></div>
     <p class="api-hint">
-      キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> で無料発行できます(カード登録不要)。
+      「こえで こたえる」を えらんだ ときだけ ひつようです。キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> で無料発行できます(カード登録不要)。
       入力したキーはこの端末のブラウザにのみ保存され、外部には送信されません。
     </p>
   </div>
@@ -98,6 +109,10 @@
     <div class="kana-quiz hidden" id="kana-quiz">
       <button id="btn-play-audio" class="btn-speaker">🔊 きいてみよう</button>
       <div class="quiz-choices" id="quiz-choices"></div>
+    </div>
+
+    <div class="reading-quiz hidden" id="reading-quiz">
+      <div class="quiz-choices reading-choices" id="reading-choices"></div>
     </div>
 
     <div class="reading-hint hidden" id="reading-hint"></div>

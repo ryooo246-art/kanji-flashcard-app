@@ -1,3 +1,4 @@
+/* version: v2.0 (2026-10-04) */
 :root{
   --mint-bg-1:#EAF9F2;
   --mint-bg-2:#D9F4E8;
@@ -367,3 +368,37 @@ h1,h2{font-family:'Mochiy Pop One', sans-serif; font-weight:400; margin:0;}
   .word-display{font-size:2.5rem;}
   .btn-mic{width:104px; height:104px;}
 }
+
+
+/* ---------------- v2.0: カタカナの行チェック ---------------- */
+.sub-options{
+  display:flex; gap:8px; flex-wrap:wrap;
+  margin:-2px 0 2px 36px; padding:10px 12px;
+  background:var(--mint-bg-2); border-radius:var(--radius-md);
+}
+.sub-check{
+  display:flex; align-items:center; gap:6px; cursor:pointer;
+  font-weight:700; font-size:.85rem; color:var(--text);
+  background:#fff; padding:6px 12px; border-radius:999px;
+}
+.sub-check input{width:20px; height:20px; accent-color:var(--mint-deep);}
+
+/* ---------------- v2.0: 漢字の答え方ラジオ ---------------- */
+.answer-mode-block{margin-top:16px; display:flex; flex-direction:column; gap:8px;}
+.answer-mode-title{font-weight:700; font-size:.9rem;}
+.radio-group{display:flex; gap:16px; flex-wrap:wrap;}
+.radio-opt{display:flex; align-items:center; gap:6px; font-weight:700; font-size:.9rem; color:var(--text); cursor:pointer;}
+.radio-opt input{width:22px; height:22px; accent-color:var(--mint-deep); cursor:pointer;}
+.answer-mode-note{font-size:.72rem; color:var(--text-soft);}
+
+/* ---------------- v2.0: 漢字の4択(読みを選ぶ) ---------------- */
+.reading-quiz{width:100%; margin-top:18px;}
+.reading-choices{margin-top:0;}
+.quiz-choice-btn.reading-choice{
+  font-size:1.35rem; padding:16px 6px; line-height:1.3;
+  overflow-wrap:anywhere;
+}
+.quiz-choice-btn.reading-choice.long{font-size:1.05rem;}
+.quiz-choice-btn.removed{opacity:.25; text-decoration:line-through;}
+
+.app-version{font-size:.7rem; color:var(--text-soft); margin-top:4px; opacity:.7;}
