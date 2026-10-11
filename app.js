@@ -1,9 +1,11 @@
 /* ==========================================================
    かんじカード - メインロジック
-   version: v2.0 (2026-10-04)
+   version: v2.2 (2026-10-11)
+   v2.2: 正解・スキップの直後2秒間は操作を無効化(連打でチェックポイントを飛ばす不具合を修正)
+   v2.1: 10問ごとの「つづける」でゲーム画面に戻らない不具合を修正
    v2.0: カタカナの行チェック / 漢字の4択(音声認識とラジオ切替) / 選択肢の自動生成
    ========================================================== */
-const APP_VERSION = 'v2.0';
+const APP_VERSION = 'v2.2';
 
 const state = {
   allWords: [],          // CSV全件 [{grade,kanji,word,reading}]
@@ -640,7 +642,7 @@ async function handleRecordedAudio(){
     }
     showFeedback('ng', msg);
   }finally{
-    document.getElementById('btn-mic').disabled = false;
+    document.getElementById('btn-mic').disabled = !!state._advancing;
     label.textContent = 'タップして よんでね';
   }
 }
@@ -956,14 +958,33 @@ function revealNextHintChar(){
 }
 
 /* ---------------- スキップ(読みを2秒表示してから次へ) ---------------- */
+// 次の問題へ進むまでの2秒間は、「つぎへ」「ヒント」「マイク」を押せなくする。
+// 押せてしまうと、答えた直後に「つぎへ」を押したときに二重に進み、
+// チェックポイントを飛ばして1問余計に進んでしまう。
+function lockInputs(lock){
+  ['btn-skip', 'btn-hint', 'btn-mic'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.disabled = lock;
+  });
+}
+
+function scheduleNext(){
+  state._advancing = true;
+  lockInputs(true);
+  setTimeout(()=>{
+    state._advancing = false;
+    lockInputs(false);
+    proceedAfterAnswer();
+  }, 2000);
+}
+
 function onSkip(){
+  if(state._advancing) return;
   const q = state.queue[state.qIndex];
   if(!q) return;
   const hint = document.getElementById('reading-hint');
   hint.textContent = q.reading;
   hint.classList.remove('hidden');
-  document.getElementById('btn-skip').disabled = true;
-  document.getElementById('btn-hint').disabled = true;
   if(state._qMode !== 'voice'){
     state._quizAnswered = true;
     document.querySelectorAll('.quiz-choice-btn').forEach(b => {
@@ -972,15 +993,12 @@ function onSkip(){
     });
   }
   state.qIndex++;
-  setTimeout(()=>{
-    document.getElementById('btn-skip').disabled = false;
-    document.getElementById('btn-hint').disabled = false;
-    proceedAfterAnswer();
-  }, 2000);
+  scheduleNext();
 }
 
 /* ---------------- 正解・不正解の処理 ---------------- */
 function onCorrect(){
+  if(state._advancing) return;
   const q = state.queue[state.qIndex];
   state.correctCount++;
   state.stars++;
@@ -1007,7 +1025,7 @@ function onCorrect(){
   reduceMistake(q);
 
   state.qIndex++;
-  setTimeout(proceedAfterAnswer, 2000);
+  scheduleNext();
 }
 
 function onIncorrect(heard){
@@ -1199,7 +1217,10 @@ function bindEvents(){
   document.getElementById('btn-mic').addEventListener('click', toggleRecording);
   document.getElementById('btn-hint').addEventListener('click', onHintClick);
   document.getElementById('btn-skip').addEventListener('click', onSkip);
-  document.getElementById('btn-checkpoint-continue').addEventListener('click', renderQuestion);
+  document.getElementById('btn-checkpoint-continue').addEventListener('click', ()=>{
+    showScreen('screen-game');
+    renderQuestion();
+  });
   document.getElementById('btn-checkpoint-stop').addEventListener('click', finishSession);
   document.querySelectorAll('input[name="answer-mode"]').forEach(r => {
     r.addEventListener('change', ()=>{
